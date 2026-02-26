@@ -6,7 +6,7 @@ module lif (
     input wire          reset_n,
     output reg [7:0]    state,
     output wire         spike
-)
+);
 
     wire [7:0] next_state;
     reg [7:0] threshold;
