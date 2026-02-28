@@ -13,5 +13,29 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Build docs
-        uses: TinyTapeout/tt-gds-action/docs@tt09
+      - name: Install dependencies (pandoc + typst)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc typst
+
+      - name: Setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install python deps
+        run: |
+          pip install -r requirements.txt || true
+
+      - name: Check docs
+        run: ./tt/tt_tool.py --check-docs
+
+      - name: Create PDF
+        run: ./tt/tt_tool.py --create-pdf
+
+      - name: Upload datasheet
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: datasheet
+          path: datasheet.pdf
