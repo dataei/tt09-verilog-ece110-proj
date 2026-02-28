@@ -40,3 +40,5 @@ MODULE = test
 
 # include cocotb's make rules to take care of the simulator setup
 include $(shell cocotb-config --makefiles)/Makefile.sim
+
+# TO ACTIVATE COCOTB : source cocotb_env/bin/activate
