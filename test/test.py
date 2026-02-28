@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: © 2024 Tiny Tapeout
+# SPDX-License-Identifier: Apache-2.0
+
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
@@ -64,9 +67,26 @@ def _spike_bit(dut) -> int:
         return (int(uio.value) >> 7) & 1
     return int(uio.value) & 1
 
+
+# ----------------------------
+# Clock API compatibility
+# ----------------------------
+
+def _make_clock(dut, period_ns=1):
+    """
+    cocotb Clock API differs across versions:
+      - newer: Clock(sig, period, unit="ns")
+      - older: Clock(sig, period, units="ns")
+    """
+    try:
+        return Clock(dut.clk, period_ns, unit="ns")
+    except TypeError:
+        return Clock(dut.clk, period_ns, units="ns")
+
+
 async def _init(dut, period_ns=1):
     """Start clock and put DUT in a known state."""
-    clock = Clock(dut.clk, period_ns, unit="ns")
+    clock = _make_clock(dut, period_ns)
     cocotb.start_soon(clock.start())
 
     rst = _get_reset(dut)
@@ -114,25 +134,19 @@ async def test_reset_clears_state(dut):
     await _drive_current(dut, 0, 5)
     mem, spk = await _collect(dut, 20)
 
-    # Spike should not be stuck high
     assert sum(spk) == 0, "Spike asserted with zero input right after reset"
 
-    # Membrane should not be wildly changing under zero input
-    # Allow a small transient; require last half to be stable-ish.
     tail = mem[len(mem)//2 :]
     assert max(tail) - min(tail) <= 2, f"Membrane not stable after reset under 0 input: {tail}"
 
 
 @cocotb.test()
 async def test_no_input_no_spike(dut):
-    """
-    With ui_in = 0 for an extended time, neuron should not spike.
-    """
+    """With ui_in = 0 for an extended time, neuron should not spike."""
     await _init(dut)
 
     await _drive_current(dut, 0, 10)
-    mem, spk = await _collect(dut, 200)
-
+    _, spk = await _collect(dut, 200)
     assert sum(spk) == 0, "Unexpected spike(s) with zero input"
 
 
@@ -147,10 +161,8 @@ async def test_integrates_up_with_constant_input(dut):
     await _drive_current(dut, 20, 5)
     mem, spk = await _collect(dut, 60)
 
-    # Ignore spike-induced resets: only examine up to first spike if any
     if 1 in spk:
-        first = spk.index(1)
-        mem = mem[:first]
+        mem = mem[:spk.index(1)]
 
     if len(mem) >= 10:
         start_avg = sum(mem[:5]) / 5
@@ -160,24 +172,18 @@ async def test_integrates_up_with_constant_input(dut):
 
 @cocotb.test()
 async def test_leak_down_when_input_removed(dut):
-    """
-    Drive neuron up with current, then set input to 0 and verify membrane trends downward or stabilizes lower.
-    """
+    """Drive neuron up with current, then set input to 0 and verify it leaks down."""
     await _init(dut)
 
-    # Charge up
     await _drive_current(dut, 30, 5)
-    mem1, spk1 = await _collect(dut, 50)
+    mem1, _ = await _collect(dut, 50)
 
-    # Remove input
     await _drive_current(dut, 0, 1)
     mem2, spk2 = await _collect(dut, 80)
 
-    # If it spiked during charge, use post-spike value as "charged baseline"
     charged_level = max(mem1) if mem1 else _membrane(dut)
     after_level = sum(mem2[-10:]) / 10
 
-    # Expect after-level <= charged_level (it should leak down or at least not exceed peak)
     assert after_level <= charged_level + 2, f"Membrane didn't leak down after removing input: charged_peak={charged_level}, after_avg={after_level}"
     assert sum(spk2) == 0, "Unexpected spike(s) after input removed (ui_in=0)"
 
@@ -185,13 +191,11 @@ async def test_leak_down_when_input_removed(dut):
 @cocotb.test()
 async def test_spike_and_reset_behavior(dut):
     """
-    Force at least one spike, then verify that a spike corresponds to a reset-like drop
-    compared to the recent pre-spike peak (not just the immediately previous cycle).
-    This handles designs where reset happens in the same cycle as spike.
+    Force at least one spike, then verify spike corresponds to a drop compared to recent pre-spike peak.
+    Handles designs where reset happens in same cycle as spike.
     """
     await _init(dut)
 
-    # Strong drive to guarantee spikes
     await _drive_current(dut, 255, 2)
     mem, spk = await _collect(dut, 250)
 
@@ -199,40 +203,31 @@ async def test_spike_and_reset_behavior(dut):
 
     i = spk.index(1)
 
-    # Look at a window BEFORE the spike to find the recent peak
     pre_lo = max(0, i - 10)
-    pre_hi = i  # exclude spike cycle
+    pre_hi = i
     pre_window = mem[pre_lo:pre_hi] if pre_hi > pre_lo else [mem[i]]
-
     pre_peak = max(pre_window)
 
-    # Look at a window AFTER the spike to find the reset / drop
     post_lo = i
     post_hi = min(len(mem), i + 5)
     post_window = mem[post_lo:post_hi]
-
     post_min = min(post_window)
 
-    # We expect the membrane to drop compared to the recent peak
-    # Allow small tolerance due to quantization.
     assert post_min <= pre_peak, (
         f"Spike did not cause a drop vs recent peak: "
         f"pre_peak={pre_peak}, post_min(first5)={post_min}, i={i}, "
         f"pre_window={pre_window}, post_window={post_window}"
     )
 
+
 @cocotb.test()
 async def test_spike_is_pulse_not_stuck_high(dut):
-    """
-    Spike should not remain high for many consecutive cycles.
-    Allow 1-2 cycles high (some designs stretch), but not long runs.
-    """
+    """Spike should not remain high for many consecutive cycles."""
     await _init(dut)
 
     await _drive_current(dut, 255, 2)
     _, spk = await _collect(dut, 200)
 
-    # compute max consecutive run of 1s
     max_run = 0
     run = 0
     for b in spk:
@@ -247,27 +242,18 @@ async def test_spike_is_pulse_not_stuck_high(dut):
 
 @cocotb.test()
 async def test_periodic_spiking_under_strong_drive(dut):
-    """
-    With a strong constant input, many LIF neurons spike repeatedly.
-    We don't require a specific period, just that we get multiple spikes (>=2).
-    """
+    """Under strong constant input, expect multiple spikes."""
     await _init(dut)
 
     await _drive_current(dut, 200, 1)
     _, spk = await _collect(dut, 400)
 
-    spike_count = sum(spk)
-    assert spike_count >= 2, f"Expected repeated spikes under strong drive, saw {spike_count}"
+    assert sum(spk) >= 2, f"Expected repeated spikes under strong drive, saw {sum(spk)}"
 
 
 @cocotb.test()
 async def test_random_stimulus_invariants(dut):
-    """
-    Randomly vary input current and check basic invariants:
-      - membrane stays within 0..255 (since output is 8-bit)
-      - spike is 0/1
-      - no X/Z on outputs (cocotb int conversion would fail if X/Z)
-    """
+    """Randomly vary input and check invariants."""
     import random
 
     await _init(dut)
@@ -287,30 +273,21 @@ async def test_random_stimulus_invariants(dut):
 
 @cocotb.test()
 async def test_step_response_charge_then_decay(dut):
-    """
-    Classic step response:
-      - hold 0 input
-      - step to a moderate input, membrane rises
-      - step back to 0, membrane falls
-    """
+    """Step input up then down; membrane should rise then decay."""
     await _init(dut)
 
-    # baseline
     await _drive_current(dut, 0, 5)
     base, _ = await _collect(dut, 20)
     base_avg = sum(base[-10:]) / 10
 
-    # step up
     await _drive_current(dut, 40, 1)
     up, spk_up = await _collect(dut, 40)
-    # if it spiked, shorten window before spike
     if 1 in spk_up:
         up = up[:spk_up.index(1)]
     if len(up) >= 10:
         up_avg = sum(up[-10:]) / 10
         assert up_avg >= base_avg, f"Membrane didn't increase on step up: base={base_avg}, up={up_avg}"
 
-    # step down
     await _drive_current(dut, 0, 1)
     down, spk_down = await _collect(dut, 60)
     down_avg = sum(down[-10:]) / 10
