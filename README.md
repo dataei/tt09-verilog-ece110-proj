@@ -1,45 +1,76 @@
-![](../../workflows/gds/badge.svg) ![](../../workflows/docs/badge.svg) ![](../../workflows/test/badge.svg) ![](../../workflows/fpga/badge.svg)
+## How it works
 
-# ⚠️ This template is old and outdated ⚠️
+This project implements a simple leaky integrate-and-fire (LIF) neuron in Verilog. The idea is to take an input “current” value each clock cycle, integrate it into a membrane state variable, and then generate a spike when the membrane crosses a threshold. After spiking, the membrane is reset so it can start integrating again.
 
-Please use **[tt10-verilog-template](https://github.com/TinyTapeout/tt10-verilog-template)** for new projects.
+I structured the design as two modules:
 
-# Tiny Tapeout Verilog Project Template
+tt_um_lif: the Tiny Tapeout top module. This is the wrapper that connects the Tiny Tapeout pins to my neuron logic. The ui[7:0] inputs are treated as an 8-bit input current, and the uo[7:0] outputs show the current membrane state (so I can see it change over time). I use uio[7] as a 1-bit spike output.
 
-- [Read the documentation for project](docs/info.md)
+lif: the actual neuron logic. This module does the integrate-leak-threshold behavior and outputs the updated membrane value plus the spike signal.
 
-## What is Tiny Tapeout?
+On each rising edge of the clock, the neuron updates its membrane state using two effects:
 
-Tiny Tapeout is an educational project that aims to make it easier and cheaper than ever to get your digital and analog designs manufactured on a real chip.
+Integrate: add the input current into the membrane value (so sustained input pushes the membrane higher).
 
-To learn more and get started, visit https://tinytapeout.com.
+Leak: apply a decay so the membrane slowly drops if the input stops (so it doesn’t just grow forever).
 
-## Set up your Verilog project
+After updating, the logic checks a threshold. If the membrane value reaches or exceeds that threshold, the module outputs a spike (a 1 on the spike bit) and resets the membrane back down (either to zero or a reset value, depending on how it’s parameterized). If the threshold isn’t reached, the spike stays low and the membrane just keeps evolving normally.
 
-1. Add your Verilog files to the `src` folder.
-2. Edit the [info.yaml](info.yaml) and update information about your project, paying special attention to the `source_files` and `top_module` properties. If you are upgrading an existing Tiny Tapeout project, check out our [online info.yaml migration tool](https://tinytapeout.github.io/tt-yaml-upgrade-tool/).
-3. Edit [docs/info.md](docs/info.md) and add a description of your project.
-4. Adapt the testbench to your design. See [test/README.md](test/README.md) for more information.
+I kept the I/O simple on purpose: the membrane state is directly visible on uo[7:0], and the spike is a single bit so it’s easy to test. This makes it straightforward to drive different input patterns on ui[7:0] and watch the membrane charge up, leak down, and spike when it crosses the threshold.
 
-The GitHub action will automatically build the ASIC files using [OpenLane](https://www.zerotoasiccourse.com/terminology/openlane/).
+## How to test
 
-## Enable GitHub actions to build the results page
+I test this project in two main ways: a fast, “does it behave logically” simulation, and a more realistic end-to-end run that matches how Tiny Tapeout expects the module to be wired.
 
-- [Enabling GitHub Pages](https://tinytapeout.com/faq/#my-github-action-is-failing-on-the-pages-part)
+1) Basic simulation (quick sanity checks)
 
-## Resources
+The first thing I do is drive ui[7:0] with simple input patterns and watch the membrane output (uo[7:0]) and spike bit (uio[7]) over time. The goal here is to confirm the neuron’s core behavior:
 
-- [FAQ](https://tinytapeout.com/faq/)
-- [Digital design lessons](https://tinytapeout.com/digital_design/)
-- [Learn how semiconductors work](https://tinytapeout.com/siliwiz/)
-- [Join the community](https://tinytapeout.com/discord)
-- [Build your design locally](https://www.tinytapeout.com/guides/local-hardening/)
+Integration: with a steady nonzero input current, the membrane value should rise over successive clock cycles.
 
-## What next?
+Leak: if I set the input back to zero, the membrane should decay downward instead of holding constant forever.
 
-- [Submit your design to the next shuttle](https://app.tinytapeout.com/).
-- Edit [this README](README.md) and explain your design, how it works, and how to test it.
-- Share your project on your social network of choice:
-  - LinkedIn [#tinytapeout](https://www.linkedin.com/search/results/content/?keywords=%23tinytapeout) [@TinyTapeout](https://www.linkedin.com/company/100708654/)
-  - Mastodon [#tinytapeout](https://chaos.social/tags/tinytapeout) [@matthewvenn](https://chaos.social/@matthewvenn)
-  - X (formerly Twitter) [#tinytapeout](https://twitter.com/hashtag/tinytapeout) [@tinytapeout](https://twitter.com/tinytapeout)
+Threshold + spike: if the input is strong enough, the membrane should eventually cross the threshold, produce a spike pulse, and then reset.
+
+I usually run a few small test cases:
+
+Zero input: membrane should stay near baseline (or decay to it) and never spike.
+
+Small constant input: membrane rises slowly and might not spike depending on threshold/leak.
+
+Large constant input: membrane crosses threshold and spikes periodically (because it resets and starts integrating again).
+
+Step input: input turns on and off so I can see both charging and leaking clearly.
+
+2) Cocotb regression tests (the official “does it pass” check)
+
+For the actual project workflow, I use the test/ directory with cocotb. The tests compile my RTL (the wrapper tt_um_lif.v plus lif.v), run a Python-based testbench, and generate:
+
+results.xml (pass/fail report)
+
+tb.vcd (waveform file so I can visually inspect signals)
+
+In CI (GitHub Actions), the test job runs:
+
+cd test
+
+make clean
+
+make
+and then checks results.xml to make sure there are no failures. If something breaks, I open the waveform and verify whether the issue is in the neuron logic (integration/leak/threshold) or in the wrapper wiring (inputs/outputs mapped incorrectly).
+
+3) What I look for in the waveform
+
+When I open tb.vcd, I specifically check:
+
+ui[7:0] changes at the intended times (input stimulus is correct)
+
+uo[7:0] responds on clock edges (synchronous update)
+
+uio[7] goes high only when the membrane crosses the threshold
+
+after a spike, the membrane resets as expected (and doesn’t immediately spike again unless the input is still high enough)
+
+This combination of small targeted patterns + a repeatable automated test makes it easy to catch wiring mistakes early and confirm the neuron behavior stays consistent after edits.
+
+
