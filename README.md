@@ -1,3 +1,4 @@
+<img width="2275" height="1214" alt="Screenshot 2026-02-27 183910" src="https://github.com/user-attachments/assets/5db3157e-fa56-414d-8982-3637accb41a3" />
 <img width="2600" height="900" alt="Screenshot 2026-02-27 183141" src="https://github.com/user-attachments/assets/f2f413f4-f374-45c9-85ac-d8767f7d278f" />
 ## How it works
 
