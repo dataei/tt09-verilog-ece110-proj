@@ -1,3 +1,4 @@
+<img width="2600" height="900" alt="Screenshot 2026-02-27 183141" src="https://github.com/user-attachments/assets/f2f413f4-f374-45c9-85ac-d8767f7d278f" />
 ## How it works
 
 This project implements a simple leaky integrate-and-fire (LIF) neuron in Verilog. The idea is to take an input “current” value each clock cycle, integrate it into a membrane state variable, and then generate a spike when the membrane crosses a threshold. After spiking, the membrane is reset so it can start integrating again.
