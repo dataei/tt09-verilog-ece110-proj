@@ -75,4 +75,5 @@ after a spike, the membrane resets as expected (and doesn’t immediately spike 
 
 This combination of small targeted patterns + a repeatable automated test makes it easy to catch wiring mistakes early and confirm the neuron behavior stays consistent after edits.
 
-
+Actions:
+[![gds](https://github.com/dataei/tt09-verilog-ece110-proj/actions/workflows/gds.yaml/badge.svg)](https://github.com/dataei/tt09-verilog-ece110-proj/actions/workflows/gds.yaml)
