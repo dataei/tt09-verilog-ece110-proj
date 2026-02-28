@@ -1,6 +1,8 @@
 <img width="2275" height="1214" alt="Screenshot 2026-02-27 183910" src="https://github.com/user-attachments/assets/5db3157e-fa56-414d-8982-3637accb41a3" />
 <img width="2600" height="900" alt="Screenshot 2026-02-27 183141" src="https://github.com/user-attachments/assets/f2f413f4-f374-45c9-85ac-d8767f7d278f" />
-[![GitHub Actions run](https://img.shields.io/badge/GitHub%20Actions-Run%2022511771290-2ea44f?logo=githubactions&logoColor=white)](https://github.com/dataei/tt09-verilog-ece110-proj/actions/runs/22511771290/attempts/1#summary-65222401049)
+
+[View this GitHub Actions run](https://github.com/dataei/tt09-verilog-ece110-proj/actions/runs/22511771290/attempts/1#summary-65222401049)
+
 ## How it works
 
 This project implements a simple leaky integrate-and-fire (LIF) neuron in Verilog. The idea is to take an input “current” value each clock cycle, integrate it into a membrane state variable, and then generate a spike when the membrane crosses a threshold. After spiking, the membrane is reset so it can start integrating again.
