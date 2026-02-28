@@ -13,10 +13,27 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install dependencies (pandoc + typst)
+      - name: Install pandoc
         run: |
           sudo apt-get update
-          sudo apt-get install -y pandoc typst
+          sudo apt-get install -y pandoc
+
+      - name: Install typst (official binary)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y curl tar xz-utils
+
+          curl -L \
+            https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-gnu.tar.xz \
+            -o typst.tar.xz
+
+          mkdir -p typst_tmp
+          tar -xJf typst.tar.xz -C typst_tmp
+
+          sudo install -m 0755 "$(find typst_tmp -type f -name typst | head -n 1)" /usr/local/bin/typst
+          typst --version
 
       - name: Setup python
         uses: actions/setup-python@v5
